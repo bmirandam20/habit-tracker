@@ -93,6 +93,12 @@ export default function HabitList({
   const [newEmoji,   setNewEmoji]   = useState('💪')
   const [addPending, setAddPending] = useState(false)
 
+  // edit-habit state
+  const [editingId,   setEditingId]   = useState<string | null>(null)
+  const [editName,    setEditName]    = useState('')
+  const [editEmoji,   setEditEmoji]   = useState('💪')
+  const [editPending, setEditPending] = useState(false)
+
   // ── derived ──────────────────────────────────────────────────────────────
   const doneCount = completed.size
   const total     = habits.length
@@ -180,6 +186,41 @@ export default function HabitList({
       setNewName('')
       setNewEmoji('💪')
       setShowForm(false)
+    }
+  }
+
+  // ── delete / edit habit ──────────────────────────────────────────────────
+  async function deleteHabit(habitId: string) {
+    if (!window.confirm('¿Eliminar este hábito?')) return
+    setHabits((prev) => prev.filter((h) => h.id !== habitId))
+    await supabase.from('habits').delete().eq('id', habitId)
+  }
+
+  function startEdit(habit: Habit) {
+    setEditingId(habit.id)
+    setEditName(habit.name)
+    setEditEmoji(habit.emoji)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setEditName('')
+    setEditEmoji('💪')
+  }
+
+  async function saveEdit(e: React.FormEvent<HTMLFormElement>, habitId: string) {
+    e.preventDefault()
+    const name = editName.trim()
+    if (!name || editPending) return
+    setEditPending(true)
+    const { error } = await supabase
+      .from('habits')
+      .update({ name, emoji: editEmoji })
+      .eq('id', habitId)
+    setEditPending(false)
+    if (!error) {
+      setHabits((prev) => prev.map((h) => h.id === habitId ? { ...h, name, emoji: editEmoji } : h))
+      cancelEdit()
     }
   }
 
@@ -391,50 +432,143 @@ export default function HabitList({
               ) : (
                 <ul className="space-y-2.5 mb-8">
                   {habits.map((habit, i) => {
-                    const accent  = ACCENTS[i % ACCENTS.length]
-                    const isDone  = completed.has(habit.id)
-                    const isLoad  = pending.has(habit.id)
-                    const popping = justCompleted.has(habit.id)
+                    const accent   = ACCENTS[i % ACCENTS.length]
+                    const isDone   = completed.has(habit.id)
+                    const isLoad   = pending.has(habit.id)
+                    const popping  = justCompleted.has(habit.id)
+                    const isEditing = editingId === habit.id
+
                     return (
                       <li key={habit.id}>
-                        <button
-                          onClick={(e) => toggle(habit.id, e)}
-                          disabled={isLoad}
-                          className={`habit-card w-full flex items-center gap-4 rounded-2xl px-5 py-[15px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${isLoad ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-                          style={{
-                            background:   isDone ? accent.doneBg  : accent.bg,
-                            border:       `1px solid ${isDone ? accent.doneBorder : accent.border}`,
-                            boxShadow:    isDone ? `0 4px 28px ${accent.glow}` : 'none',
-                            '--card-glow': accent.glow,
-                          } as React.CSSProperties}
-                        >
-                          <div className="relative shrink-0 leading-none">
-                            <span className="text-[1.55rem] select-none">{habit.emoji}</span>
-                            <span className="absolute -top-0.5 -right-0.5 h-[7px] w-[7px] rounded-full" style={{ background: accent.color, boxShadow:`0 0 6px ${accent.color}`, opacity: isDone ? 1 : 0.65 }} />
+
+                        {/* ── Inline edit form ─────────────────────── */}
+                        {isEditing ? (
+                          <form
+                            onSubmit={(e) => saveEdit(e, habit.id)}
+                            className="form-slide rounded-2xl p-4"
+                            style={{ background: accent.doneBg, border: `1px solid ${accent.doneBorder}` }}
+                          >
+                            <div className="grid grid-cols-10 gap-1 mb-3">
+                              {EMOJI_OPTIONS.map((em) => (
+                                <button
+                                  key={em} type="button"
+                                  onClick={() => setEditEmoji(em)}
+                                  className="emoji-btn flex items-center justify-center h-7 w-7 rounded-lg text-base"
+                                  style={{
+                                    background: editEmoji === em ? 'rgba(139,92,246,0.25)' : 'rgba(255,255,255,0.04)',
+                                    border: `1px solid ${editEmoji === em ? 'rgba(139,92,246,0.5)' : 'rgba(255,255,255,0.07)'}`,
+                                  }}
+                                >
+                                  {em}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex items-center gap-2 rounded-xl px-3 py-2 mb-3" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                              <span className="text-lg leading-none">{editEmoji}</span>
+                              <input
+                                type="text"
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                maxLength={60}
+                                autoFocus
+                                className="flex-1 bg-transparent text-sm font-medium text-zinc-100 placeholder:text-zinc-600 outline-none"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="submit"
+                                disabled={!editName.trim() || editPending}
+                                className="flex-1 rounded-xl py-2 text-sm font-bold disabled:opacity-40"
+                                style={{ background: 'linear-gradient(135deg,#8b5cf6,#10b981)', color: 'white' }}
+                              >
+                                {editPending ? 'Guardando…' : 'Guardar'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelEdit}
+                                className="rounded-xl px-4 py-2 text-sm font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
+                                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </form>
+
+                        ) : (
+
+                          /* ── Normal card ─────────────────────────── */
+                          <div className="group relative">
+                            <button
+                              onClick={(e) => toggle(habit.id, e)}
+                              disabled={isLoad}
+                              className={`habit-card w-full flex items-center gap-4 rounded-2xl px-5 py-[15px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 ${isLoad ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                              style={{
+                                background:    isDone ? accent.doneBg : accent.bg,
+                                border:        `1px solid ${isDone ? accent.doneBorder : accent.border}`,
+                                boxShadow:     isDone ? `0 4px 28px ${accent.glow}` : 'none',
+                                '--card-glow': accent.glow,
+                              } as React.CSSProperties}
+                            >
+                              <div className="relative shrink-0 leading-none">
+                                <span className="text-[1.55rem] select-none">{habit.emoji}</span>
+                                <span className="absolute -top-0.5 -right-0.5 h-[7px] w-[7px] rounded-full" style={{ background: accent.color, boxShadow: `0 0 6px ${accent.color}`, opacity: isDone ? 1 : 0.65 }} />
+                              </div>
+                              <span
+                                className={`flex-1 text-[15px] font-semibold leading-snug transition-all duration-300 ${isDone ? 'line-through' : 'text-zinc-100'}`}
+                                style={isDone ? { color: accent.textDone, textDecorationColor: accent.color + '55' } : undefined}
+                              >
+                                {habit.name}
+                              </span>
+                              <span
+                                className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full border-2"
+                                style={{
+                                  borderColor: isDone ? accent.color : 'rgba(255,255,255,0.14)',
+                                  background:  isDone ? accent.color : 'transparent',
+                                  boxShadow:   isDone ? `0 0 12px ${accent.glow}` : 'none',
+                                  transition:  'background 220ms, border-color 220ms, box-shadow 220ms',
+                                  animation:   popping ? 'pop-in 0.44s cubic-bezier(0.34,1.56,0.64,1) forwards' : undefined,
+                                }}
+                              >
+                                {isDone && (
+                                  <svg className="h-3.5 w-3.5 text-white" viewBox="0 0 12 10" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="1 5 4 8 11 1" />
+                                  </svg>
+                                )}
+                              </span>
+                            </button>
+
+                            {/* Action icons — visible on hover */}
+                            <div className="absolute right-[52px] top-1/2 -translate-y-1/2 z-10 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none group-hover:pointer-events-auto">
+                              <button
+                                type="button"
+                                onClick={() => startEdit(habit)}
+                                title="Editar"
+                                className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-100"
+                                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }}
+                                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.13)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
+                              >
+                                <svg className="h-3.5 w-3.5 text-zinc-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M11.5 2.5a1.414 1.414 0 0 1 2 2L5 13H3v-2L11.5 2.5Z" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteHabit(habit.id)}
+                                title="Eliminar"
+                                className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors duration-100"
+                                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }}
+                                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(239,68,68,0.18)')}
+                                onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
+                              >
+                                <svg className="h-3.5 w-3.5 text-zinc-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4" />
+                                </svg>
+                              </button>
+                            </div>
+
                           </div>
-                          <span
-                            className={`flex-1 text-[15px] font-semibold leading-snug transition-all duration-300 ${isDone ? 'line-through' : 'text-zinc-100'}`}
-                            style={isDone ? { color: accent.textDone, textDecorationColor: accent.color+'55' } : undefined}
-                          >
-                            {habit.name}
-                          </span>
-                          <span
-                            className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full border-2"
-                            style={{
-                              borderColor: isDone ? accent.color : 'rgba(255,255,255,0.14)',
-                              background:  isDone ? accent.color : 'transparent',
-                              boxShadow:   isDone ? `0 0 12px ${accent.glow}` : 'none',
-                              transition:  'background 220ms, border-color 220ms, box-shadow 220ms',
-                              animation:   popping ? 'pop-in 0.44s cubic-bezier(0.34,1.56,0.64,1) forwards' : undefined,
-                            }}
-                          >
-                            {isDone && (
-                              <svg className="h-3.5 w-3.5 text-white" viewBox="0 0 12 10" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="1 5 4 8 11 1" />
-                              </svg>
-                            )}
-                          </span>
-                        </button>
+                        )}
                       </li>
                     )
                   })}
