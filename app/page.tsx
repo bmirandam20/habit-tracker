@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import HabitList from '@/app/ui/habit-list'
 
+export const dynamic = 'force-dynamic'
+
 /** Format a local Date as YYYY-MM-DD without UTC shift */
 function fmt(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
