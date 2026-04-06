@@ -3,9 +3,19 @@ import HabitList from '@/app/ui/habit-list'
 
 export const dynamic = 'force-dynamic'
 
-/** Format a local Date as YYYY-MM-DD without UTC shift */
-function fmt(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const TZ = 'America/Santiago'
+
+/** Returns today's date as YYYY-MM-DD in the Santiago timezone. */
+function todayInSantiago(): string {
+  // en-CA locale produces YYYY-MM-DD which is the format we need
+  return new Date().toLocaleDateString('en-CA', { timeZone: TZ })
+}
+
+/** Add (or subtract) whole days from a YYYY-MM-DD string. */
+function addDays(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(y, m - 1, d + days)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
 }
 
 function calcStreak(
@@ -21,29 +31,24 @@ function calcStreak(
     byDate.get(l.date)!.add(l.habit_id)
   }
   let streak = 0
-  const cur = new Date(today + 'T12:00:00')
+  let cur = today
   while (streak < 365) {
-    const ds = fmt(cur)
-    const done = byDate.get(ds)
+    const done = byDate.get(cur)
     if (!done || !ids.every((id) => done.has(id))) break
     streak++
-    cur.setDate(cur.getDate() - 1)
+    cur = addDays(cur, -1)
   }
   return streak
 }
 
 export default async function Page() {
-  const today = fmt(new Date())
+  const today = todayInSantiago()
 
-  // last 7 dates oldest→newest
-  const last7Dates = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date()
-    d.setDate(d.getDate() - (6 - i))
-    return fmt(d)
-  })
+  // last 7 dates oldest→newest, all relative to today in Santiago
+  const last7Dates = Array.from({ length: 7 }, (_, i) => addDays(today, -(6 - i)))
 
   // fetch last 60 days for streak + week history in one query
-  const sixtyAgo = fmt(new Date(Date.now() - 59 * 86_400_000))
+  const sixtyAgo = addDays(today, -59)
 
   const [{ data: rawHabits }, { data: rawLogs }] = await Promise.all([
     supabase.from('habits').select('id, name, emoji').order('created_at'),

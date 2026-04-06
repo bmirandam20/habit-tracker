@@ -56,7 +56,10 @@ const EMOJI_OPTIONS = [
 const DAY_LABEL = ['D','L','M','X','J','V','S']
 
 function getGreeting() {
-  const h = new Date().getHours()
+  const h = parseInt(
+    new Date().toLocaleString('en-US', { timeZone: 'America/Santiago', hour: 'numeric', hour12: false }),
+    10,
+  )
   if (h < 6)  return { text: 'Madrugada de campeones' }
   if (h < 12) return { text: 'Buenos días, es hoy' }
   if (h < 17) return { text: 'La racha no se rompe sola' }
@@ -326,7 +329,7 @@ export default function HabitList({
                   </h1>
                 )}
                 <p className="mt-2.5 text-sm text-zinc-500 font-medium capitalize">
-                  {new Date().toLocaleDateString('es-ES', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}
+                  {new Date().toLocaleDateString('es-ES', { timeZone: 'America/Santiago', weekday:'long', day:'numeric', month:'long', year:'numeric' })}
                 </p>
               </header>
 
